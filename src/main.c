@@ -79,8 +79,8 @@ int main()
 		adc_avg = (adc_avg + adc_corrected_value) / 2; /* Скользящее среднее */
 		//adc_avg = (adc_avg * 14 + adc_corrected_value * 2) / 16; /* Сглаживание по альфа-бета */
 
-		/* Печатать усредненное значение после 1000 преобразований */
 		if(count % 1000 == 0) {
+			/* Печатать усредненное значение после 1000 преобразований */
 			xprintf("Time: %08X:%08X,\tADC: %4d %4d %4d (%d.%03d V)\t",
 				SCR1_TIMER->MTIMEH, SCR1_TIMER->MTIME,
 				adc_raw_value, adc_corrected_value, adc_avg,
@@ -88,7 +88,14 @@ int main()
 				((adc_avg * 1200) / 4095) % 1000);
 
 			xprintf("\r\n");
+		}
 
+		/* Мигать зеленым светодиодом */
+		if(count % 4000 == 0) {
+			GPIO_0->OUTPUT ^= GPIO_PIN_9; // Инвертируем GPIO светодиода
+		}
+
+		if(count % 100 == 0) {
 			if(adc_avg >= ADC_THRESHOLD && motor_state == 1) {
 				motor_state = -1;
 
@@ -96,11 +103,13 @@ int main()
 				HAL_Timer32_Channel_OCR_Set(&htimer32_channel1, 0);
 				HAL_Timer32_Channel_OCR_Set(&htimer32_channel3, timer_top);
 
+				#if(0)
 				for(volatile int i = 0; i < 100000; i++);
 
 				// Stop
-				//HAL_Timer32_Channel_OCR_Set(&htimer32_channel1, 0);
-				//HAL_Timer32_Channel_OCR_Set(&htimer32_channel3, 0);
+				HAL_Timer32_Channel_OCR_Set(&htimer32_channel1, 0);
+				HAL_Timer32_Channel_OCR_Set(&htimer32_channel3, 0);
+				#endif
 
 
 				// Turn wheels left
@@ -331,6 +340,12 @@ void GPIO_Init()
 	/* Настроить сигнал P2.1 (IR Receiver) как входной сигнал GPIO */
 	GPIO_InitStruct.Pin = GPIO_PIN_1;
 	HAL_GPIO_Init(GPIO_2, &GPIO_InitStruct);
+
+	/* Настроить сигнал P0.9 (LED Green) как выходной сигнал GPIO */
+	GPIO_InitStruct.Pin = GPIO_PIN_9;
+	GPIO_InitStruct.Mode = HAL_GPIO_MODE_GPIO_OUTPUT;
+	GPIO_InitStruct.Pull = HAL_GPIO_PULL_NONE;
+	HAL_GPIO_Init(GPIO_0, &GPIO_InitStruct);
 
 	/* Включить прерывания от P1.15 (User Button) как IRQ Line 3 по спаду */
 	HAL_GPIO_InitInterruptLine(GPIO_MUX_PORT1_15_LINE_3, GPIO_INT_MODE_FALLING);
