@@ -13,11 +13,13 @@
 #include "xprintf.h"
 #include "ir_decoder.h"
 
+#define	DEBUG	1
+
 #define	MIK32V2
 
 //#define	ADC_OFFSET	172
 #define	ADC_OFFSET	0	
-#define	ADC_THRESHOLD	2000	// Stop if ADC is greater than this value	
+#define	ADC_THRESHOLD	1000	// Stop if ADC is greater than this value	
 #define	TIMER_FREQ	100	// Motor PWM and Servo PDM frequency, Hz
 #define	STEERING_MAX	1800	// Steering servo max PDM value (60 degree)
 #define	STEERING_MID	1500	// Steering servo middle PDM value (0 degree)
@@ -58,7 +60,9 @@ int main()
 
 	HAL_Timer32_Channel_OCR_Set(&htimer32_channel2, (OSC_SYSTEM_VALUE / 8 / 1000000) * steering_pdm_us);
 
+	#if(DEBUG)
 	xprintf("IRCard Control Software. Copyright (C) 2025, Fabmicro, LLC., Tyumen, Russia.\r\n");
+	#endif
 
 	/* Разрешить прерывания по уровню для линии EPIC GPIO_IRQ */
 	HAL_EPIC_MaskLevelSet(HAL_EPIC_GPIO_IRQ_MASK);
@@ -79,8 +83,9 @@ int main()
 		adc_avg = (adc_avg + adc_corrected_value) / 2; /* Скользящее среднее */
 		//adc_avg = (adc_avg * 14 + adc_corrected_value * 2) / 16; /* Сглаживание по альфа-бета */
 
-		if(count % 1000 == 0) {
+		if(count % 2000 == 0) {
 			/* Печатать усредненное значение после 1000 преобразований */
+			#if(DEBUG)
 			xprintf("Time: %08X:%08X,\tADC: %4d %4d %4d (%d.%03d V)\t",
 				SCR1_TIMER->MTIMEH, SCR1_TIMER->MTIME,
 				adc_raw_value, adc_corrected_value, adc_avg,
@@ -88,6 +93,7 @@ int main()
 				((adc_avg * 1200) / 4095) % 1000);
 
 			xprintf("\r\n");
+			#endif
 		}
 
 		/* Мигать зеленым светодиодом */
@@ -133,19 +139,25 @@ int main()
 			switch(ir_decoder_command) {
 				case 0x19E60707: { // Power - Stop 
 						motor_state = 0;
+						#if(DEBUG)
 						xprintf("MOTOR STOP\r\n");
+						#endif
 						break;
 					}
 					
 				case 0x9F600707: { // UP - Move Forward
 						motor_state = 1;
+						#if(DEBUG)
 						xprintf("MOTOR FORWARD: %d\r\n", motor_pwm);
+						#endif
 						break;
 					}
 					
 				case 0x9E610707: { // Down - Move Backward
 						motor_state = -1;
+						#if(DEBUG)
 						xprintf("MOTOR BACKWARD: %d\r\n", motor_pwm);
+						#endif
 						break;
 					}
 					
@@ -156,7 +168,9 @@ int main()
 						if(motor_pwm > timer_top)
 							motor_pwm = timer_top;
 
+						#if(DEBUG)
 						xprintf("MOTOR SPEED UP: %d\r\n", motor_pwm);
+						#endif
 						break;
 					}
 					
@@ -166,7 +180,9 @@ int main()
 						if(motor_pwm < 0)
 							motor_pwm = 0;
 
+						#if(DEBUG)
 						xprintf("MOTOR SPEED DOWN: %d\r\n", motor_pwm);
+						#endif
 						break;
 					}
 					
@@ -179,7 +195,10 @@ int main()
 						HAL_Timer32_Channel_OCR_Set(&htimer32_channel2,
 							(OSC_SYSTEM_VALUE / 8 / 1000000) * steering_pdm_us);
 
+						
+						#if(DEBUG)
 						xprintf("LEFT: %d us\r\n", steering_pdm_us);
+						#endif
 						break;
 					}
 
@@ -192,7 +211,9 @@ int main()
 						HAL_Timer32_Channel_OCR_Set(&htimer32_channel2,
 							(OSC_SYSTEM_VALUE / 8 / 1000000) * steering_pdm_us);
 
+						#if(DEBUG)
 						xprintf("RIGHT: %d us\r\n", steering_pdm_us);
+						#endif
 						break;
 					}
 
@@ -202,13 +223,17 @@ int main()
 						HAL_Timer32_Channel_OCR_Set(&htimer32_channel2,
 							(OSC_SYSTEM_VALUE / 8 / 1000000) * steering_pdm_us);
 
+						#if(DEBUG)
 						xprintf("CENTERED: %d us\r\n", steering_pdm_us);
+						#endif
 
 						motor_state = 0;
 						HAL_Timer32_Channel_OCR_Set(&htimer32_channel1, 0);
 						HAL_Timer32_Channel_OCR_Set(&htimer32_channel3, 0);
 
+						#if(DEBUG)
 						xprintf("MOTOR STOP\r\n");
+						#endif
 
 						break;
 					}
@@ -219,7 +244,9 @@ int main()
 						HAL_Timer32_Channel_OCR_Set(&htimer32_channel2,
 							(OSC_SYSTEM_VALUE / 8 / 1000000) * steering_pdm_us);
 
+						#if(DEBUG)
 						xprintf("CENTERED: %d us\r\n", steering_pdm_us);
+						#endif
 
 						break;
 					}
@@ -406,10 +433,11 @@ void trap_handler()
 {
     if (EPIC_CHECK_GPIO_IRQ()) {
         if (HAL_GPIO_LineInterruptState(GPIO_LINE_3)) {
+		#if(DEBUG)
 		xprintf("\r\nIRQ_LINE3_BUTTON\r\n");
+		#endif
         }
         if (HAL_GPIO_LineInterruptState(GPIO_LINE_1)) {
-		//xprintf("\r\nIRQ_LINE1_IR\r\n");
 		ir_decoder_irq(HAL_GPIO_ReadPin(GPIO_2, GPIO_PIN_1));
         }
         HAL_GPIO_ClearInterrupts();
