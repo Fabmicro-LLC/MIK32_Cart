@@ -22,7 +22,7 @@ SRCS =  $(RUNTIME) \
 ##############################################################################
 #
 TOOLCHAIN_DIR = /opt/mik32
-CROSS = /opt/riscv64/bin/riscv64-unknown-elf-
+CROSS ?= /opt/riscv64/bin/riscv64-unknown-elf-
 MIK32_UPLOADER_DIR = /opt/mik32/mik32-uploader
 CC = $(CROSS)gcc
 LD = $(CROSS)ld
@@ -30,7 +30,8 @@ STRIP = $(CROSS)strip
 OBJCOPY = $(CROSS)objcopy
 OBJDUMP = $(CROSS)objdump
 
-MARCH = rv32imc
+#MARCH = rv32imc
+MARCH = rv32imac_zicsr
 MABI = ilp32
 
 #
