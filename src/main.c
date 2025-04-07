@@ -46,6 +46,14 @@ uint32_t timer_top = OSC_SYSTEM_VALUE / 8 / TIMER_FREQ;
 int32_t motor_pwm = OSC_SYSTEM_VALUE / 8 / TIMER_FREQ / 2;
 uint32_t steering_pdm_us = STEERING_MID - STEERING_OFFSET; // 1500us - center, 1100us - -90 degree, 1900us - +90 degree
 
+void DelayMs(uint32_t ms)
+{
+	uint32_t t0 = SCR1_TIMER->MTIME;
+
+	while((SCR1_TIMER->MTIME - t0) / 32000 < ms);
+}
+
+
 int main()
 {
 
@@ -105,12 +113,16 @@ int main()
 			if(adc_avg >= ADC_THRESHOLD && motor_state == 1) {
 				motor_state = -1;
 
+				#if(DEBUG)
+				xprintf("OBSTACLE!!\r\n");
+				#endif
+
 				// Reverse
 				HAL_Timer32_Channel_OCR_Set(&htimer32_channel1, 0);
 				HAL_Timer32_Channel_OCR_Set(&htimer32_channel3, timer_top);
 
-				#if(0)
-				for(volatile int i = 0; i < 100000; i++);
+				#if(1)
+				DelayMs(1000);
 
 				// Stop
 				HAL_Timer32_Channel_OCR_Set(&htimer32_channel1, 0);
@@ -129,9 +141,6 @@ int main()
 
 			}
 		}
-
-		//HAL_Time_SCR1TIM_DelayMs(250); // Hangs here, broken HAL ?
-		for(volatile int i = 0; i < 50; i++);
 
 		if(ir_decoder_command_ready) {
 			ir_decoder_command_ready = 0;
