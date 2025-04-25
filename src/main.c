@@ -19,7 +19,7 @@
 
 //#define	ADC_OFFSET	172
 #define	ADC_OFFSET	0	
-#define	ADC_THRESHOLD	1500	// Stop if ADC is greater than this value	
+#define	ADC_THRESHOLD	3500	// Stop if ADC is greater than this value	
 #define	TIMER_FREQ	100	// Motor PWM and Servo PDM frequency, Hz
 #define	STEERING_MAX	1800	// Steering servo max PDM value (60 degree)
 #define	STEERING_MID	1500	// Steering servo middle PDM value (0 degree)
@@ -45,6 +45,7 @@ int32_t motor_state = 0;	// 0 - stop, 1 - forward, -1 - backward
 uint32_t timer_top = OSC_SYSTEM_VALUE / 8 / TIMER_FREQ;
 int32_t motor_pwm = OSC_SYSTEM_VALUE / 8 / TIMER_FREQ / 2;
 uint32_t steering_pdm_us = STEERING_MID - STEERING_OFFSET; // 1500us - center, 1100us - -90 degree, 1900us - +90 degree
+uint32_t timestamp_last = 0;
 
 void DelayMs(uint32_t ms)
 {
@@ -78,9 +79,10 @@ int main()
 	/* Разрешить глобальные прерывания */
 	HAL_IRQ_EnableInterrupts();
 
-	int16_t adc_corrected_value, adc_raw_value;
+	uint32_t adc_corrected_value, adc_raw_value;
 
 	while (1) {
+		uint32_t timestamp;
 
 	 	HAL_ADC_SINGLE_AND_SET_CH(hadc.Instance, 0);
 
@@ -88,12 +90,21 @@ int main()
 		adc_raw_value = HAL_ADC_WaitAndGetValue(&hadc);
 
 		adc_corrected_value = adc_raw_value - ADC_OFFSET;
-		adc_avg = (adc_avg + adc_corrected_value) / 2; /* Скользящее среднее */
-		//adc_avg = (adc_avg * 14 + adc_corrected_value * 2) / 16; /* Сглаживание по альфа-бета */
+		//adc_avg = (adc_avg + adc_corrected_value) / 2; /* Скользящее среднее */
+		adc_avg = (adc_avg * 255 + adc_corrected_value) / 256; /* Сглаживание по альфа-бета */
 
-		if(count % 2000 == 0) {
+		timestamp = SCR1_TIMER->MTIME;
+
+		if(timestamp - timestamp_last >= 32000000/8) { // 128 ms
+
+			timestamp_last = timestamp;
+
+			/* Мигать зеленым светодиодом */
+
+			GPIO_0->OUTPUT ^= GPIO_PIN_9; // Инвертируем зеленый светодиод (LED Green)
+
 			/* Печатать усредненное значение после 1000 преобразований */
-			#if(DEBUG)
+
 			xprintf("Time: %08X:%08X,\tADC: %4d %4d %4d (%d.%03d V)\t",
 				SCR1_TIMER->MTIMEH, SCR1_TIMER->MTIME,
 				adc_raw_value, adc_corrected_value, adc_avg,
@@ -101,21 +112,21 @@ int main()
 				((adc_avg * 1200) / 4095) % 1000);
 
 			xprintf("\r\n");
-			#endif
 		}
 
-		/* Мигать зеленым светодиодом */
-		if(count % 4000 == 0) {
-			GPIO_0->OUTPUT ^= GPIO_PIN_9; // Инвертируем GPIO светодиода
-		}
+		if(count % 2000 == 0) {
 
-		if(count % 100 == 0) {
+			/* Зажигаем красный светодиод если обнаружено препятсвие */
+			if(adc_avg >= ADC_THRESHOLD)
+				GPIO_0->OUTPUT &= ~GPIO_PIN_10; // Зажигаем красный светодиод (LED Red)
+			else
+				GPIO_0->OUTPUT |= GPIO_PIN_10; // Гасим красный светодиод
+
+
 			if(adc_avg >= ADC_THRESHOLD && motor_state == 1) {
 				motor_state = -1;
 
-				#if(DEBUG)
 				xprintf("OBSTACLE!!\r\n");
-				#endif
 
 				// Reverse
 				HAL_Timer32_Channel_OCR_Set(&htimer32_channel1, 0);
@@ -148,25 +159,19 @@ int main()
 			switch(ir_decoder_command) {
 				case 0x19E60707: { // Power - Stop 
 						motor_state = 0;
-						#if(DEBUG)
 						xprintf("MOTOR STOP\r\n");
-						#endif
 						break;
 					}
 					
 				case 0x9F600707: { // UP - Move Forward
 						motor_state = 1;
-						#if(DEBUG)
 						xprintf("MOTOR FORWARD: %d\r\n", motor_pwm);
-						#endif
 						break;
 					}
 					
 				case 0x9E610707: { // Down - Move Backward
 						motor_state = -1;
-						#if(DEBUG)
 						xprintf("MOTOR BACKWARD: %d\r\n", motor_pwm);
-						#endif
 						break;
 					}
 					
@@ -177,9 +182,7 @@ int main()
 						if(motor_pwm > timer_top)
 							motor_pwm = timer_top;
 
-						#if(DEBUG)
 						xprintf("MOTOR SPEED UP: %d\r\n", motor_pwm);
-						#endif
 						break;
 					}
 					
@@ -189,9 +192,7 @@ int main()
 						if(motor_pwm < 0)
 							motor_pwm = 0;
 
-						#if(DEBUG)
 						xprintf("MOTOR SPEED DOWN: %d\r\n", motor_pwm);
-						#endif
 						break;
 					}
 					
@@ -205,9 +206,7 @@ int main()
 							(OSC_SYSTEM_VALUE / 8 / 1000000) * steering_pdm_us);
 
 						
-						#if(DEBUG)
 						xprintf("LEFT: %d us\r\n", steering_pdm_us);
-						#endif
 						break;
 					}
 
@@ -220,9 +219,7 @@ int main()
 						HAL_Timer32_Channel_OCR_Set(&htimer32_channel2,
 							(OSC_SYSTEM_VALUE / 8 / 1000000) * steering_pdm_us);
 
-						#if(DEBUG)
 						xprintf("RIGHT: %d us\r\n", steering_pdm_us);
-						#endif
 						break;
 					}
 
@@ -232,17 +229,13 @@ int main()
 						HAL_Timer32_Channel_OCR_Set(&htimer32_channel2,
 							(OSC_SYSTEM_VALUE / 8 / 1000000) * steering_pdm_us);
 
-						#if(DEBUG)
 						xprintf("CENTERED: %d us\r\n", steering_pdm_us);
-						#endif
 
 						motor_state = 0;
 						HAL_Timer32_Channel_OCR_Set(&htimer32_channel1, 0);
 						HAL_Timer32_Channel_OCR_Set(&htimer32_channel3, 0);
 
-						#if(DEBUG)
 						xprintf("MOTOR STOP\r\n");
-						#endif
 
 						break;
 					}
@@ -253,9 +246,7 @@ int main()
 						HAL_Timer32_Channel_OCR_Set(&htimer32_channel2,
 							(OSC_SYSTEM_VALUE / 8 / 1000000) * steering_pdm_us);
 
-						#if(DEBUG)
 						xprintf("CENTERED: %d us\r\n", steering_pdm_us);
-						#endif
 
 						break;
 					}
@@ -360,7 +351,11 @@ void GPIO_Init()
 	/* Настроить сигнал P0.9 (LED Green) как выходной сигнал GPIO */
 	GPIO_InitStruct.Pin = GPIO_PIN_9;
 	GPIO_InitStruct.Mode = HAL_GPIO_MODE_GPIO_OUTPUT;
-	GPIO_InitStruct.Pull = HAL_GPIO_PULL_NONE;
+	HAL_GPIO_Init(GPIO_0, &GPIO_InitStruct);
+
+	/* Настроить сигнал P0.10 (LED Red) как выходной сигнал GPIO */
+	GPIO_InitStruct.Pin = GPIO_PIN_10;
+	GPIO_InitStruct.Mode = HAL_GPIO_MODE_GPIO_OUTPUT;
 	HAL_GPIO_Init(GPIO_0, &GPIO_InitStruct);
 
 	/* Включить прерывания от P1.15 (User Button) как IRQ Line 3 по спаду */
