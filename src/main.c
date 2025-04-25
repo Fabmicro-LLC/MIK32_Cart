@@ -19,7 +19,7 @@
 
 //#define	ADC_OFFSET	172
 #define	ADC_OFFSET	0	
-#define	ADC_THRESHOLD	1000	// Stop if ADC is greater than this value	
+#define	ADC_THRESHOLD	1500	// Stop if ADC is greater than this value	
 #define	TIMER_FREQ	100	// Motor PWM and Servo PDM frequency, Hz
 #define	STEERING_MAX	1800	// Steering servo max PDM value (60 degree)
 #define	STEERING_MID	1500	// Steering servo middle PDM value (0 degree)
@@ -69,7 +69,7 @@ int main()
 	HAL_Timer32_Channel_OCR_Set(&htimer32_channel2, (OSC_SYSTEM_VALUE / 8 / 1000000) * steering_pdm_us);
 
 	#if(DEBUG)
-	xprintf("IRCard Control Software. Copyright (C) 2025, Fabmicro, LLC., Tyumen, Russia.\r\n");
+	xprintf("IR-Cart Control Software. Copyright (C) 2025, Fabmicro, LLC., Tyumen, Russia.\r\n");
 	#endif
 
 	/* Разрешить прерывания по уровню для линии EPIC GPIO_IRQ */
@@ -321,8 +321,8 @@ static void ADC_Init(void)
 {
 	hadc.Instance = ANALOG_REG;
 
-	/* Выбор канала АЦП */
-	hadc.Init.Sel = ADC_CHANNEL4;
+	/* Выбор канала АЦП для которого будет выполнена инициализация */
+	hadc.Init.Sel = ADC_CHANNEL0; // P1.5
 
 	/* Выбор источника опорного напряжения: «1» - внешний; «0» - встроенный */
 	hadc.Init.EXTRef = ADC_EXTREF_OFF;	
@@ -331,29 +331,9 @@ static void ADC_Init(void)
 	/* Выбор внешнего опорного напряжения: «1» - внешний вывод; «0» - настраиваемый ОИН */
 	hadc.Init.EXTClb = ADC_EXTCLB_ADCREF;
 
+	/* Функция HAL_ADC_Init() сама переведет соответствующий вывод GPIO в режим ANALOG */
 	HAL_ADC_Init(&hadc);
 }
-
-void HAL_ADC_MspInit(ADC_HandleTypeDef *hadc)
-{
-	GPIO_InitTypeDef GPIO_InitStruct = {0};
-	__HAL_PCC_ANALOG_REGS_CLK_ENABLE();
-
-	GPIO_InitStruct.Mode = HAL_GPIO_MODE_ANALOG;
-	GPIO_InitStruct.Pull = HAL_GPIO_PULL_NONE;
-
-	/* Настройка входа опорного напряжения для АЦП */
-	if ((hadc->Init.EXTClb == ADC_EXTCLB_ADCREF) && (hadc->Init.EXTRef == ADC_EXTREF_ON)) {
-		GPIO_InitStruct.Pin = GPIO_PIN_11;
-		HAL_GPIO_Init(GPIO_1, &GPIO_InitStruct);
-	}
-
-
-	/* Настройка входов АЦП */
-	GPIO_InitStruct.Pin = GPIO_PIN_5;
-	HAL_GPIO_Init(GPIO_1, &GPIO_InitStruct);
-}
-
 
 void GPIO_Init()
 {
